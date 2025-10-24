@@ -149,8 +149,8 @@ impl<'a, 'c> QueryCtx<'a, 'c> {
             (Some(break_), Some(continue_)) => {
                 for entry in ctx.entries {
                     match entry.0 {
-                        CtxFlags::BREAK => self.0.add_edge(entry.1, break_, EdgeType::Jump),
-                        CtxFlags::CONTINUE => self.0.add_edge(entry.1, continue_, EdgeType::Jump),
+                        CtxFlags::BREAK => self.0.add_edge(entry.1, break_, EdgeType::Jump(crate::JumpKind::Unconditional)),
+                        CtxFlags::CONTINUE => self.0.add_edge(entry.1, continue_, EdgeType::Jump(crate::JumpKind::Unconditional)),
                         _ => {}
                     }
                 }
@@ -158,14 +158,14 @@ impl<'a, 'c> QueryCtx<'a, 'c> {
             (Some(jmp), None) => {
                 for entry in ctx.entries {
                     if matches!(entry.0, CtxFlags::BREAK) {
-                        self.0.add_edge(entry.1, jmp, EdgeType::Jump);
+                        self.0.add_edge(entry.1, jmp, EdgeType::Jump(crate::JumpKind::Unconditional));
                     }
                 }
             }
             (None, Some(jmp)) => {
                 for entry in ctx.entries {
                     if matches!(entry.0, CtxFlags::CONTINUE) {
-                        self.0.add_edge(entry.1, jmp, EdgeType::Jump);
+                        self.0.add_edge(entry.1, jmp, EdgeType::Jump(crate::JumpKind::Unconditional));
                     }
                 }
             }

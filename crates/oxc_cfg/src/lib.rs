@@ -48,9 +48,17 @@ impl fmt::Display for BasicBlockId {
 pub type Graph = petgraph::graph::DiGraph<BasicBlockId, EdgeType>;
 
 #[derive(Debug, Clone)]
+pub enum JumpKind {
+    True,
+    False,
+    Unconditional
+    // (potentially Later: SwitchCase(u32) for multi-way dispatch)
+}
+
+#[derive(Debug, Clone)]
 pub enum EdgeType {
     /// Conditional jumps
-    Jump,
+    Jump(JumpKind),
     /// Normal control flow path
     Normal,
     /// Cyclic aka loops
@@ -162,7 +170,7 @@ impl ControlFlowGraph {
         fn get_jump_target(graph: &Graph, node: BlockNodeId) -> Option<BlockNodeId> {
             graph
                 .edges_directed(node, Direction::Outgoing)
-                .find_or_first(|e| matches!(e.weight(), EdgeType::Jump))
+                .find_or_first(|e| matches!(e.weight(), EdgeType::Jump(_)))
                 .map(|it| it.target())
         }
 

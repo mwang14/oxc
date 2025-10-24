@@ -13,7 +13,7 @@ use oxc_ast_visit::Visit;
 #[cfg(feature = "cfg")]
 use oxc_cfg::{
     ControlFlowGraphBuilder, CtxCursor, CtxFlags, EdgeType, ErrorEdgeKind, InstructionKind,
-    IterationInstructionKind, ReturnInstructionKind,
+    IterationInstructionKind, ReturnInstructionKind, JumpKind
 };
 use oxc_diagnostics::OxcDiagnostic;
 use oxc_span::{Atom, SourceType, Span};
@@ -182,6 +182,7 @@ impl<'a> SemanticBuilder<'a> {
         self
     }
 
+    
     #[cfg(not(feature = "cfg"))]
     pub fn with_cfg(self, _cfg: bool) -> Self {
         self
@@ -1009,9 +1010,9 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
                 after_conditional_graph_ix,
                 EdgeType::Normal,
             );
-            cfg.add_edge(after_condition_graph_ix, before_consequent_expr_graph_ix, EdgeType::Jump);
+            cfg.add_edge(after_condition_graph_ix, before_consequent_expr_graph_ix, EdgeType::Jump(JumpKind::True));
 
-            cfg.add_edge(after_condition_graph_ix, start_alternate_graph_ix, EdgeType::Normal);
+            cfg.add_edge(after_condition_graph_ix, start_alternate_graph_ix, EdgeType::Jump(JumpKind::False));
             cfg.add_edge(after_alternate_graph_ix, after_conditional_graph_ix, EdgeType::Normal);
         });
         /* cfg */
@@ -1073,10 +1074,10 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             let after_body_graph_ix = cfg.current_node_ix;
             let after_for_stmt = cfg.new_basic_block_normal();
             cfg.add_edge(before_for_graph_ix, test_graph_ix, EdgeType::Normal);
-            cfg.add_edge(after_test_graph_ix, before_body_graph_ix, EdgeType::Jump);
+            cfg.add_edge(after_test_graph_ix, before_body_graph_ix, EdgeType::Jump(JumpKind::True));
             cfg.add_edge(after_body_graph_ix, update_graph_ix, EdgeType::Backedge);
             cfg.add_edge(update_graph_ix, test_graph_ix, EdgeType::Backedge);
-            cfg.add_edge(after_test_graph_ix, after_for_stmt, EdgeType::Normal);
+            cfg.add_edge(after_test_graph_ix, after_for_stmt, EdgeType::Jump(JumpKind::False));
 
             cfg.ctx(None)
                 .mark_break(after_for_stmt)
@@ -1133,13 +1134,13 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             // connect the end of the iterable expression to the basic block with back edge
             cfg.add_edge(end_of_prepare_cond_graph_ix, iteration_graph_ix, EdgeType::Normal);
             // connect the basic block with back edge to the start of the body
-            cfg.add_edge(iteration_graph_ix, body_graph_ix, EdgeType::Jump);
+            cfg.add_edge(iteration_graph_ix, body_graph_ix, EdgeType::Jump(JumpKind::True));
             // connect the end of the body back to the basic block
             // with back edge for the next iteration
             cfg.add_edge(end_of_body_graph_ix, iteration_graph_ix, EdgeType::Backedge);
             // connect the basic block with back edge to the basic block after the for loop
             // for when there are no more iterations left in the iterable
-            cfg.add_edge(iteration_graph_ix, after_for_graph_ix, EdgeType::Normal);
+            cfg.add_edge(iteration_graph_ix, after_for_graph_ix, EdgeType::Jump(JumpKind::False));
 
             cfg.ctx(None)
                 .mark_break(after_for_graph_ix)
@@ -1195,13 +1196,13 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             // connect the end of the iterable expression to the basic block with back edge
             cfg.add_edge(end_of_prepare_cond_graph_ix, iteration_graph_ix, EdgeType::Normal);
             // connect the basic block with back edge to the start of the body
-            cfg.add_edge(iteration_graph_ix, body_graph_ix, EdgeType::Jump);
+            cfg.add_edge(iteration_graph_ix, body_graph_ix, EdgeType::Jump(JumpKind::True));
             // connect the end of the body back to the basic block
             // with back edge for the next iteration
             cfg.add_edge(end_of_body_graph_ix, iteration_graph_ix, EdgeType::Backedge);
             // connect the basic block with back edge to the basic block after the for loop
             // for when there are no more iterations left in the iterable
-            cfg.add_edge(iteration_graph_ix, after_for_graph_ix, EdgeType::Normal);
+            cfg.add_edge(iteration_graph_ix, after_for_graph_ix, EdgeType::Jump(JumpKind::False));
 
             cfg.ctx(None)
                 .mark_break(after_for_graph_ix)
@@ -1269,17 +1270,17 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
 
             cfg.add_edge(before_if_stmt_graph_ix, start_of_condition_graph_ix, EdgeType::Normal);
 
-            cfg.add_edge(after_test_graph_ix, before_consequent_stmt_graph_ix, EdgeType::Jump);
+            cfg.add_edge(after_test_graph_ix, before_consequent_stmt_graph_ix, EdgeType::Jump(JumpKind::True));
 
             cfg.add_edge(after_consequent_stmt_graph_ix, after_if_graph_ix, EdgeType::Normal);
 
             if let Some((start_of_alternate_stmt_graph_ix, after_alternate_stmt_graph_ix)) =
                 else_graph_ix
             {
-                cfg.add_edge(after_test_graph_ix, start_of_alternate_stmt_graph_ix, EdgeType::Jump);
+                cfg.add_edge(after_test_graph_ix, start_of_alternate_stmt_graph_ix, EdgeType::Jump(JumpKind::False));
                 cfg.add_edge(after_alternate_stmt_graph_ix, after_if_graph_ix, EdgeType::Normal);
             } else {
-                cfg.add_edge(after_test_graph_ix, after_if_graph_ix, EdgeType::Jump);
+                cfg.add_edge(after_test_graph_ix, after_if_graph_ix, EdgeType::Jump(JumpKind::False));
             }
         });
         /* cfg */
@@ -1449,7 +1450,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
         control_flow!(self, |cfg| {
             let after_test_graph_ix = cfg.current_node_ix;
             let statements_in_switch_graph_ix = cfg.new_basic_block_normal();
-            cfg.add_edge(after_test_graph_ix, statements_in_switch_graph_ix, EdgeType::Jump);
+            cfg.add_edge(after_test_graph_ix, statements_in_switch_graph_ix, EdgeType::Jump(JumpKind::False)); // TODO We need to desugar these.
         });
         /* cfg */
 
@@ -1654,9 +1655,9 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             let after_while_graph_ix = cfg.new_basic_block_normal();
 
             cfg.add_edge(before_while_stmt_graph_ix, condition_graph_ix, EdgeType::Normal);
-            cfg.add_edge(condition_graph_ix, body_graph_ix, EdgeType::Jump);
+            cfg.add_edge(condition_graph_ix, body_graph_ix, EdgeType::Jump(JumpKind::True));
             cfg.add_edge(after_body_graph_ix, condition_graph_ix, EdgeType::Backedge);
-            cfg.add_edge(condition_graph_ix, after_while_graph_ix, EdgeType::Normal);
+            cfg.add_edge(condition_graph_ix, after_while_graph_ix, EdgeType::Jump(JumpKind::False));
 
             cfg.ctx(None)
                 .mark_break(after_while_graph_ix)
