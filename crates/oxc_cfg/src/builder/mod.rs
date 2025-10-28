@@ -42,6 +42,7 @@ impl<'a> ControlFlowGraphBuilder<'a> {
             .graph
             .node_weight(basic_block)
             .expect("expected `self.current_node_ix` to be a valid node index in self.graph");
+        //println!("BLAH {:?}", self.current_node_ix);
         self.basic_blocks
             .get(idx)
             .expect("expected `self.current_node_ix` to be a valid node index in self.graph")

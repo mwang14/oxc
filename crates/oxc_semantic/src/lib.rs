@@ -94,6 +94,13 @@ pub struct Semantic<'a> {
     #[cfg(not(feature = "cfg"))]
     #[allow(unused)]
     cfg: (),
+
+    /// Function-specific CFG data for parallel analysis
+    #[cfg(feature = "cfg")]
+    function_cfgs: rustc_hash::FxHashMap<String, crate::builder::FunctionCfgData>,
+    #[cfg(not(feature = "cfg"))]
+    #[allow(unused)]
+    function_cfgs: (),
 }
 
 impl<'a> Semantic<'a> {
@@ -186,6 +193,17 @@ impl<'a> Semantic<'a> {
     #[cfg(not(feature = "cfg"))]
     pub fn cfg(&self) -> Option<&()> {
         None
+    }
+
+    /// Function-specific CFG data for parallel analysis
+    #[cfg(feature = "cfg")]
+    pub fn function_cfgs(&self) -> &rustc_hash::FxHashMap<String, crate::builder::FunctionCfgData> {
+        &self.function_cfgs
+    }
+
+    #[cfg(not(feature = "cfg"))]
+    pub fn function_cfgs(&self) -> &() {
+        &self.function_cfgs
     }
 
     /// Get statistics about data held in `Semantic`.

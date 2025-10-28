@@ -35,6 +35,7 @@ itertools = { workspace = true }
 phf = { workspace = true, features = ["macros"] }
 rustc-hash = { workspace = true }
 self_cell = { workspace = true }
+petgraph.workspace = true
 
 [dev-dependencies]
 insta = { workspace = true, features = ["glob"] }

@@ -13,8 +13,17 @@ use oxc_ast_visit::Visit;
 #[cfg(feature = "cfg")]
 use oxc_cfg::{
     ControlFlowGraphBuilder, CtxCursor, CtxFlags, EdgeType, ErrorEdgeKind, InstructionKind,
-    IterationInstructionKind, ReturnInstructionKind, JumpKind
+    IterationInstructionKind, ReturnInstructionKind, JumpKind, BlockNodeId
 };
+
+#[cfg(feature = "cfg")]
+#[derive(Debug)]
+pub struct FunctionCfgData {
+    pub function_id: String,
+    pub blocks: Vec<BlockNodeId>,
+    pub entry_block: Option<BlockNodeId>,
+    pub exit_blocks: Vec<BlockNodeId>,
+}
 use oxc_diagnostics::OxcDiagnostic;
 use oxc_span::{Atom, SourceType, Span};
 use oxc_syntax::{
@@ -110,6 +119,11 @@ pub struct SemanticBuilder<'a> {
 
     #[cfg(feature = "cfg")]
     ast_node_records: Vec<NodeId>,
+
+    #[cfg(feature = "cfg")]
+    function_stack: Vec<String>,
+    #[cfg(feature = "cfg")]
+    function_cfgs: FxHashMap<String, FunctionCfgData>,
 }
 
 /// Data returned by [`SemanticBuilder::build`].
@@ -156,6 +170,10 @@ impl<'a> SemanticBuilder<'a> {
             class_table_builder: ClassTableBuilder::new(),
             #[cfg(feature = "cfg")]
             ast_node_records: Vec::new(),
+            #[cfg(feature = "cfg")]
+            function_stack: Vec::new(),
+            #[cfg(feature = "cfg")]
+            function_cfgs: FxHashMap::default(),
         }
     }
 
@@ -186,6 +204,41 @@ impl<'a> SemanticBuilder<'a> {
     #[cfg(not(feature = "cfg"))]
     pub fn with_cfg(self, _cfg: bool) -> Self {
         self
+    }
+
+    #[cfg(feature = "cfg")]
+    fn push_function(&mut self, span: Span) {
+        let function_id = format!("{}:{}", span.start, span.end);
+        let function_id_cloned = function_id.clone();
+        self.function_stack.push(function_id.clone());
+        self.function_cfgs.insert(function_id, FunctionCfgData {
+            function_id: function_id_cloned,
+            blocks: Vec::new(),
+            entry_block: None,
+            exit_blocks: Vec::new(),
+        });
+    }
+
+    #[cfg(feature = "cfg")]
+    fn pop_function(&mut self) {
+        self.function_stack.pop();
+    }
+
+    #[cfg(feature = "cfg")]
+    fn current_function_id(&self) -> Option<&String> {
+        self.function_stack.last()
+    }
+
+    #[cfg(feature = "cfg")]
+    fn track_block(&mut self, block_id: BlockNodeId) {
+        if let Some(function_id) = self.current_function_id().cloned() {
+            if let Some(cfg_data) = self.function_cfgs.get_mut(&function_id) {
+                cfg_data.blocks.push(block_id);
+                if cfg_data.entry_block.is_none() {
+                    cfg_data.entry_block = Some(block_id);
+                }
+            }
+        }
     }
 
     #[must_use]
@@ -304,6 +357,10 @@ impl<'a> SemanticBuilder<'a> {
             cfg: self.cfg.map(ControlFlowGraphBuilder::build),
             #[cfg(not(feature = "cfg"))]
             cfg: (),
+            #[cfg(feature = "cfg")]
+            function_cfgs: self.function_cfgs,
+            #[cfg(not(feature = "cfg"))]
+            function_cfgs: (),
         };
         SemanticBuilderReturn { semantic, errors: self.errors.into_inner() }
     }
@@ -1349,6 +1406,18 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             cfg.push_return(ret_kind, Some(node_id));
             cfg.append_unreachable();
         });
+
+        // Track return block as exit block
+        #[cfg(feature = "cfg")]
+        if let Some(cfg) = &self.cfg {
+            let current_block = cfg.current_node_ix;
+            self.track_block(current_block);
+            if let Some(function_id) = self.current_function_id().cloned() {
+                if let Some(cfg_data) = self.function_cfgs.get_mut(&function_id) {
+                    cfg_data.exit_blocks.push(current_block);
+                }
+            }
+        }
         /* cfg */
 
         self.leave_node(kind);
@@ -1703,6 +1772,10 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
 
     fn visit_function(&mut self, func: &Function<'a>, flags: ScopeFlags) {
         /* cfg */
+        // Push function to tracking stack
+        #[cfg(feature = "cfg")]
+        self.push_function(func.span);
+
         // We add a new basic block to the cfg before entering the node
         // so that the correct cfg_ix is associated with the ast node.
         #[cfg(feature = "cfg")]
@@ -1715,6 +1788,10 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
                 cfg.ctx(None).new_function();
                 (before_function_graph_ix, error_harness, function_graph_ix)
             });
+
+        // Track the function entry block
+        #[cfg(feature = "cfg")]
+        self.track_block(function_graph_ix);
         /* cfg */
 
         let kind = AstKind::Function(self.alloc(func));
@@ -1805,6 +1882,20 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
         self.leave_node(kind);
 
         self.current_function_node_id = parent_function_node_id;
+
+        /* cfg */
+        // Pop function from tracking stack
+        #[cfg(feature = "cfg")]
+        {
+            //if let Some(function_id) = self.current_function_id() {
+            //    if let Some(cfg_data) = self.function_cfgs.get(function_id) {
+            //        println!("Function {}: {} blocks, entry: {:?}, exits: {:?}", 
+            //            cfg_data.function_id, cfg_data.blocks.len(), cfg_data.entry_block, cfg_data.exit_blocks);
+            //    }
+            //}
+            self.pop_function();
+        }
+        /* cfg */
     }
 
     fn visit_arrow_function_expression(&mut self, expr: &ArrowFunctionExpression<'a>) {
