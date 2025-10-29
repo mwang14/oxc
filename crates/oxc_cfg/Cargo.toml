@@ -28,3 +28,4 @@ bitflags = { workspace = true }
 itertools = { workspace = true }
 petgraph = { workspace = true, default-features = false, features = ["std", "stable_graph"] }
 rustc-hash = { workspace = true }
+oxc_ast.workspace = true

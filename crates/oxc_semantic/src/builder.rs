@@ -2138,7 +2138,7 @@ impl<'a> SemanticBuilder<'a> {
                 AstKind::ReturnStatement(_)
                 | AstKind::BreakStatement(_)
                 | AstKind::ContinueStatement(_)
-                | AstKind::ThrowStatement(_) => { /* These types have their own `InstructionKind`. */
+                | AstKind::ThrowStatement(_) => { cfg.enter_statement(self.current_node_id);/* These types have their own `InstructionKind`. */
                 }
                 it if it.is_statement() => {
                     cfg.enter_statement(self.current_node_id);

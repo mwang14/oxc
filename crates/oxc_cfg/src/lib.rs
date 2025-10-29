@@ -92,7 +92,7 @@ pub enum EvalConstConditionResult {
     Eval(bool),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ControlFlowGraph {
     pub graph: Graph,
     pub basic_blocks: IndexVec<BasicBlockId, BasicBlock>,
