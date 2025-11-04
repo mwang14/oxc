@@ -99,7 +99,7 @@ impl Default for Scoping {
             references: IndexVec::new(),
             no_side_effects: FxHashSet::default(),
             scope_parent_ids: IndexVec::new(),
-            scope_build_child_ids: false,
+            scope_build_child_ids: true, // modified to be true so we get child id's
             scope_node_ids: IndexVec::new(),
             scope_flags: IndexVec::new(),
             cell: ScopingCell::new(Allocator::default(), |allocator| ScopingInner {

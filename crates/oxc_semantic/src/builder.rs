@@ -18,11 +18,13 @@ use oxc_cfg::{
 
 #[cfg(feature = "cfg")]
 #[derive(Debug)]
-pub struct FunctionCfgData {
+pub struct OxcFunctionData {
     pub function_id: String,
     pub blocks: Vec<BlockNodeId>,
     pub entry_block: Option<BlockNodeId>,
     pub exit_blocks: Vec<BlockNodeId>,
+    pub scope_id: Option<ScopeId>,
+    pub function_node_id: Option<NodeId>
 }
 use oxc_diagnostics::OxcDiagnostic;
 use oxc_span::{Atom, SourceType, Span};
@@ -123,7 +125,7 @@ pub struct SemanticBuilder<'a> {
     #[cfg(feature = "cfg")]
     function_stack: Vec<String>,
     #[cfg(feature = "cfg")]
-    function_cfgs: FxHashMap<String, FunctionCfgData>,
+    oxc_function_data: FxHashMap<String, OxcFunctionData>,
 }
 
 /// Data returned by [`SemanticBuilder::build`].
@@ -173,7 +175,7 @@ impl<'a> SemanticBuilder<'a> {
             #[cfg(feature = "cfg")]
             function_stack: Vec::new(),
             #[cfg(feature = "cfg")]
-            function_cfgs: FxHashMap::default(),
+            oxc_function_data: FxHashMap::default(),
         }
     }
 
@@ -211,11 +213,13 @@ impl<'a> SemanticBuilder<'a> {
         let function_id = format!("{}:{}", span.start, span.end);
         let function_id_cloned = function_id.clone();
         self.function_stack.push(function_id.clone());
-        self.function_cfgs.insert(function_id, FunctionCfgData {
+        self.oxc_function_data.insert(function_id, OxcFunctionData {
             function_id: function_id_cloned,
             blocks: Vec::new(),
             entry_block: None,
             exit_blocks: Vec::new(),
+            scope_id: None,
+            function_node_id: None
         });
     }
 
@@ -241,11 +245,32 @@ impl<'a> SemanticBuilder<'a> {
     #[cfg(feature = "cfg")]
     fn track_block(&mut self, block_id: BlockNodeId) {
         if let Some(function_id) = self.current_function_id().cloned() {
-            if let Some(cfg_data) = self.function_cfgs.get_mut(&function_id) {
+            if let Some(cfg_data) = self.oxc_function_data.get_mut(&function_id) {
                 cfg_data.blocks.push(block_id);
                 if cfg_data.entry_block.is_none() {
                     cfg_data.entry_block = Some(block_id);
                 }
+            } else {
+                panic!("Function id not found in function data!");
+            }
+        } 
+    }
+
+    #[cfg(feature = "cfg")]
+    fn track_function_id(&mut self, function_node_id: NodeId) {
+        if let Some(function_id) = self.current_function_id().cloned() {
+            if let Some(cfg_data) = self.oxc_function_data.get_mut(&function_id) {
+                cfg_data.function_node_id = Some(function_node_id);
+            } else {
+                panic!("Function id not found in function data!");
+            }
+        } 
+    }
+
+    fn add_scope_id(&mut self, scope_id: ScopeId) {
+        if let Some(function_id) = self.current_function_id().cloned() {
+            if let Some(cfg_data) = self.oxc_function_data.get_mut(&function_id) {
+                cfg_data.scope_id = Some(scope_id);
             }
         }
     }
@@ -367,9 +392,9 @@ impl<'a> SemanticBuilder<'a> {
             #[cfg(not(feature = "cfg"))]
             cfg: (),
             #[cfg(feature = "cfg")]
-            function_cfgs: self.function_cfgs,
+            oxc_function_data: self.oxc_function_data,
             #[cfg(not(feature = "cfg"))]
-            function_cfgs: (),
+            oxc_function_data: (),
         };
         SemanticBuilderReturn { semantic, errors: self.errors.into_inner() }
     }
@@ -1483,7 +1508,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             let current_block = cfg.current_node_ix;
             self.track_block(current_block);
             if let Some(function_id) = self.current_function_id().cloned() {
-                if let Some(cfg_data) = self.function_cfgs.get_mut(&function_id) {
+                if let Some(cfg_data) = self.oxc_function_data.get_mut(&function_id) {
                     //cfg_data.exit_blocks.push(current_block);
                 }
             }
@@ -1879,9 +1904,9 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
 
     fn visit_function(&mut self, func: &Function<'a>, flags: ScopeFlags) {
         /* cfg */
+        self.push_function(func.span);
         // Push function to tracking stack
         #[cfg(feature = "cfg")]
-        self.push_function(func.span);
 
         // We add a new basic block to the cfg before entering the node
         // so that the correct cfg_ix is associated with the ast node.
@@ -1902,10 +1927,12 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
         /* cfg */
 
         let kind = AstKind::Function(self.alloc(func));
+        // This is where the node id for function_node_id is made, and also where it's set.
         self.enter_node(kind);
 
         let parent_function_node_id = self.current_function_node_id;
         self.current_function_node_id = self.current_node_id;
+        self.track_function_id(self.current_node_id);
 
         if func.is_declaration() {
             func.bind(self);
@@ -1986,9 +2013,13 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
         });
         self.track_block(after_function_graph_ix);
         /* cfg */
-
+        // Ok, so I think here we can track the function scope ID. Then we can add that into the function_cfg's 
+        // information so we can easily grab it out in global_aggregator.rs.
+        // getting the scope_id() of the function should be safe because it should be set in enter_scope above.
+        self.add_scope_id(func.scope_id()); 
         self.leave_scope();
         self.leave_node(kind);
+
 
         self.current_function_node_id = parent_function_node_id;
 
@@ -1997,7 +2028,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
         #[cfg(feature = "cfg")]
         {
             //if let Some(function_id) = self.current_function_id() {
-            //    if let Some(cfg_data) = self.function_cfgs.get(function_id) {
+            //    if let Some(cfg_data) = self.oxc_function_data.get(function_id) {
             //        println!("Function {}: {} blocks, entry: {:?}, exits: {:?}", 
             //            cfg_data.function_id, cfg_data.blocks.len(), cfg_data.entry_block, cfg_data.exit_blocks);
             //    }

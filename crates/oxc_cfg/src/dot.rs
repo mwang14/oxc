@@ -43,7 +43,8 @@ impl DisplayDot for ControlFlowGraph {
                 },
                 &|_graph, node| {
                     let block = &self.basic_blocks[*node.1];
-                    let mut attrs = Attrs::default().with("label", block.display_dot());
+                    let block_label = format!("Block {}\n{}", node.1.index(), block.display_dot());
+                    let mut attrs = Attrs::default().with("label", block_label);
 
                     if node.1.index() == 0 {
                         attrs += ("color", "green");

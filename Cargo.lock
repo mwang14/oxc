@@ -1897,6 +1897,7 @@ version = "0.94.0"
 dependencies = [
  "bitflags 2.9.4",
  "itertools",
+ "oxc_ast 0.94.0",
  "oxc_index 4.1.0",
  "oxc_syntax 0.94.0",
  "petgraph",
@@ -2582,6 +2583,7 @@ dependencies = [
  "oxc_parser 0.94.0",
  "oxc_span 0.94.0",
  "oxc_syntax 0.94.0",
+ "petgraph",
  "phf",
  "rustc-hash",
  "self_cell",
