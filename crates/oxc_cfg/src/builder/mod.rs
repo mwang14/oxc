@@ -3,7 +3,7 @@ mod context;
 use context::Ctx;
 pub use context::{CtxCursor, CtxFlags};
 use oxc_index::IndexVec;
-use oxc_syntax::node::NodeId;
+use oxc_syntax::{node::NodeId, scope::ScopeId};
 use petgraph::Direction;
 
 use super::{
@@ -29,7 +29,7 @@ pub struct ControlFlowGraphBuilder<'a> {
 
 impl<'a> ControlFlowGraphBuilder<'a> {
     pub fn build(self) -> ControlFlowGraph {
-        ControlFlowGraph { graph: self.graph, basic_blocks: self.basic_blocks }
+        ControlFlowGraph { graph: self.graph, entry_block_index: None, basic_blocks: self.basic_blocks }
     }
 
     pub fn current_basic_block(&mut self) -> &mut BasicBlock {
@@ -108,16 +108,16 @@ impl<'a> ControlFlowGraphBuilder<'a> {
         self.graph.add_edge(a, b, weight);
     }
 
-    pub fn push_statement(&mut self, stmt: NodeId) {
-        self.push_instruction(InstructionKind::Statement, Some(stmt));
+    pub fn push_statement(&mut self, stmt: NodeId, scope_id: ScopeId) {
+        self.push_instruction(InstructionKind::Statement, Some(stmt), Some(scope_id));
     }
 
-    pub fn push_return(&mut self, kind: ReturnInstructionKind, node: Option<NodeId>) {
-        self.push_instruction(InstructionKind::Return(kind), node);
+    pub fn push_return(&mut self, kind: ReturnInstructionKind, node: Option<NodeId>, scope_id: ScopeId) {
+        self.push_instruction(InstructionKind::Return(kind), node, Some(scope_id));
     }
 
     pub fn push_implicit_return(&mut self) {
-        self.push_instruction(InstructionKind::ImplicitReturn, None);
+        self.push_instruction(InstructionKind::ImplicitReturn, None, None);
     }
 
     /// Creates and push a new `BasicBlockId` onto `self.error_path` stack.
@@ -171,20 +171,20 @@ impl<'a> ControlFlowGraphBuilder<'a> {
         );
     }
 
-    pub fn append_condition_to(&mut self, block: BlockNodeId, node: Option<NodeId>) {
-        self.push_instruction_to(block, InstructionKind::Condition, node);
+    pub fn append_condition_to(&mut self, block: BlockNodeId, node: Option<NodeId>, scope_id: ScopeId) {
+        self.push_instruction_to(block, InstructionKind::Condition, node, Some(scope_id));
     }
 
-    pub fn append_iteration(&mut self, node: Option<NodeId>, kind: IterationInstructionKind) {
-        self.push_instruction(InstructionKind::Iteration(kind), node);
+    pub fn append_iteration(&mut self, node: Option<NodeId>, kind: IterationInstructionKind, scope_id: Option<ScopeId>) {
+        self.push_instruction(InstructionKind::Iteration(kind), node, scope_id);
     }
 
-    pub fn append_throw(&mut self, node: NodeId) {
-        self.push_instruction(InstructionKind::Throw, Some(node));
+    pub fn append_throw(&mut self, node: NodeId, scope_id: ScopeId) {
+        self.push_instruction(InstructionKind::Throw, Some(node),Some(scope_id));
         self.append_unreachable();
     }
 
-    pub fn append_break(&mut self, node: NodeId, label: Option<&'a str>) {
+    pub fn append_break(&mut self, node: NodeId, label: Option<&'a str>, scope_id: ScopeId) {
         let kind = match label {
             Some(_) => LabeledInstruction::Labeled,
             None => LabeledInstruction::Unlabeled,
@@ -192,13 +192,13 @@ impl<'a> ControlFlowGraphBuilder<'a> {
 
         let bb = self.current_node_ix;
 
-        self.push_instruction(InstructionKind::Break(kind), Some(node));
+        self.push_instruction(InstructionKind::Break(kind), Some(node), Some(scope_id));
         self.append_unreachable();
 
         self.ctx(label).r#break(bb);
     }
 
-    pub fn append_continue(&mut self, node: NodeId, label: Option<&'a str>) {
+    pub fn append_continue(&mut self, node: NodeId, label: Option<&'a str>, scope_id: ScopeId) {
         let kind = match label {
             Some(_) => LabeledInstruction::Labeled,
             None => LabeledInstruction::Unlabeled,
@@ -206,7 +206,7 @@ impl<'a> ControlFlowGraphBuilder<'a> {
 
         let bb = self.current_node_ix;
 
-        self.push_instruction(InstructionKind::Continue(kind), Some(node));
+        self.push_instruction(InstructionKind::Continue(kind), Some(node), Some(scope_id));
         self.append_unreachable();
 
         self.ctx(label).r#continue(bb);
@@ -215,7 +215,7 @@ impl<'a> ControlFlowGraphBuilder<'a> {
     pub fn append_unreachable(&mut self) {
         let current_node_ix = self.current_node_ix;
         let basic_block_with_unreachable_graph_ix = self.new_basic_block_normal();
-        self.push_instruction(InstructionKind::Unreachable, None);
+        self.push_instruction(InstructionKind::Unreachable, None, None);
         self.current_basic_block().mark_as_unreachable();
         self.add_edge(
             current_node_ix,
@@ -226,8 +226,8 @@ impl<'a> ControlFlowGraphBuilder<'a> {
 
     /// # Panics
     #[inline]
-    pub(self) fn push_instruction(&mut self, kind: InstructionKind, node_id: Option<NodeId>) {
-        self.push_instruction_to(self.current_node_ix, kind, node_id);
+    pub(self) fn push_instruction(&mut self, kind: InstructionKind, node_id: Option<NodeId>, scope_id: Option<ScopeId>) {
+        self.push_instruction_to(self.current_node_ix, kind, node_id, scope_id);
     }
 
     #[inline]
@@ -236,11 +236,12 @@ impl<'a> ControlFlowGraphBuilder<'a> {
         block: BlockNodeId,
         kind: InstructionKind,
         node_id: Option<NodeId>,
+        scope_id: Option<ScopeId>
     ) {
-        self.basic_block_mut(block).instructions.push(Instruction { kind, node_id });
+        self.basic_block_mut(block).instructions.push(Instruction { kind, node_id, scope_id });
     }
 
-    pub fn enter_statement(&mut self, stmt: NodeId) {
-        self.push_statement(stmt);
+    pub fn enter_statement(&mut self, stmt: NodeId, scope_id: ScopeId) {
+        self.push_statement(stmt, scope_id);
     }
 }

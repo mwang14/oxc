@@ -799,7 +799,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
 
         /* cfg */
         control_flow!(self, |cfg| cfg
-            .append_break(node_id, stmt.label.as_ref().map(|it| it.name.as_str())));
+            .append_break(node_id, stmt.label.as_ref().map(|it| it.name.as_str()), self.current_scope_id));
         /* cfg */
 
         self.leave_node(kind);
@@ -891,7 +891,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
 
         /* cfg */
         control_flow!(self, |cfg| cfg
-            .append_continue(node_id, stmt.label.as_ref().map(|it| it.name.as_str())));
+            .append_continue(node_id, stmt.label.as_ref().map(|it| it.name.as_str()), self.current_scope_id));
         /* cfg */
 
         self.leave_node(kind);
@@ -934,7 +934,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
 
         /* cfg */
         let (end_of_condition_graph_ix, end_do_while_graph_ix) = control_flow!(self, |cfg| {
-            cfg.append_condition_to(start_of_condition_graph_ix, test_node_id);
+            cfg.append_condition_to(start_of_condition_graph_ix, test_node_id, self.current_scope_id);
             let end_of_condition_graph_ix = cfg.current_node_ix;
 
             let end_do_while_graph_ix = cfg.new_basic_block_normal();
@@ -1085,7 +1085,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
         #[cfg(feature = "cfg")]
         let (after_condition_graph_ix, before_consequent_expr_graph_ix) =
             control_flow!(self, |cfg| {
-                cfg.append_condition_to(start_of_condition_graph_ix, test_node_id);
+                cfg.append_condition_to(start_of_condition_graph_ix, test_node_id, self.current_scope_id);
                 let after_condition_graph_ix = cfg.current_node_ix;
                 // conditional expression basic block
                 let before_consequent_expr_graph_ix = cfg.new_basic_block_normal();
@@ -1167,7 +1167,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             let test_node_id = self.retrieve_recorded_ast_node();
 
             /* cfg */
-            control_flow!(self, |cfg| cfg.append_condition_to(test_graph_ix, test_node_id));
+            control_flow!(self, |cfg| cfg.append_condition_to(test_graph_ix, test_node_id, self.current_scope_id));
             /* cfg */
         }
 
@@ -1180,7 +1180,10 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
         /* cfg */
 
         if let Some(update) = &stmt.update {
+            self.record_ast_nodes();
             self.visit_expression(update);
+            let update_node_id = self.retrieve_recorded_ast_node().unwrap();
+            control_flow!(self, |cfg| cfg.enter_statement(update_node_id, self.current_scope_id)); // Adds the assignment expression to the CFG
         }
 
         /* cfg */
@@ -1245,7 +1248,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             control_flow!(self, |cfg| {
                 let end_of_prepare_cond_graph_ix = cfg.current_node_ix;
                 let iteration_graph_ix = cfg.new_basic_block_normal();
-                cfg.append_iteration(right_node_id, IterationInstructionKind::In);
+                cfg.append_iteration(right_node_id, IterationInstructionKind::In, Some(self.current_scope_id));
                 let body_graph_ix = cfg.new_basic_block_normal();
 
                 cfg.ctx(None).default().allow_break().allow_continue();
@@ -1316,7 +1319,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             control_flow!(self, |cfg| {
                 let end_of_prepare_cond_graph_ix = cfg.current_node_ix;
                 let iteration_graph_ix = cfg.new_basic_block_normal();
-                cfg.append_iteration(right_node_id, IterationInstructionKind::Of);
+                cfg.append_iteration(right_node_id, IterationInstructionKind::Of, Some(self.current_scope_id));
                 let body_graph_ix = cfg.new_basic_block_normal();
                 cfg.ctx(None).default().allow_break().allow_continue();
                 (end_of_prepare_cond_graph_ix, iteration_graph_ix, body_graph_ix)
@@ -1379,7 +1382,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
         /* cfg */
         #[cfg(feature = "cfg")]
         let (after_test_graph_ix, before_consequent_stmt_graph_ix) = control_flow!(self, |cfg| {
-            cfg.append_condition_to(start_of_condition_graph_ix, test_node_id);
+            cfg.append_condition_to(start_of_condition_graph_ix, test_node_id, self.current_scope_id);
             (cfg.current_node_ix, cfg.new_basic_block_normal())
         });
         self.track_block(after_test_graph_ix);
@@ -1498,7 +1501,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
 
         /* cfg */
         control_flow!(self, |cfg| {
-            cfg.push_return(ret_kind, Some(node_id));
+            cfg.push_return(ret_kind, Some(node_id), self.current_scope_id);
             cfg.append_unreachable();
         });
 
@@ -1613,7 +1616,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             self.visit_expression(expr);
             #[cfg(feature = "cfg")]
             let test_node_id = self.retrieve_recorded_ast_node();
-            control_flow!(self, |cfg| cfg.append_condition_to(cfg.current_node_ix, test_node_id));
+            control_flow!(self, |cfg| cfg.append_condition_to(cfg.current_node_ix, test_node_id, self.current_scope_id));
         }
 
         /* cfg */
@@ -1643,7 +1646,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
         self.visit_expression(&stmt.argument);
 
         /* cfg */
-        control_flow!(self, |cfg| cfg.append_throw(node_id));
+        control_flow!(self, |cfg| cfg.append_throw(node_id, self.current_scope_id));
         /* cfg */
 
         self.leave_node(kind);
@@ -1831,7 +1834,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
         /* cfg - body basic block */
         #[cfg(feature = "cfg")]
         let body_graph_ix = control_flow!(self, |cfg| {
-            cfg.append_condition_to(condition_graph_ix, test_node_id);
+            cfg.append_condition_to(condition_graph_ix, test_node_id, self.current_scope_id);
             let body_graph_ix = cfg.new_basic_block_normal();
 
             cfg.ctx(None).default().allow_break().allow_continue();
@@ -2278,10 +2281,15 @@ impl<'a> SemanticBuilder<'a> {
                 AstKind::ReturnStatement(_)
                 | AstKind::BreakStatement(_)
                 | AstKind::ContinueStatement(_)
-                | AstKind::ThrowStatement(_) => { cfg.enter_statement(self.current_node_id);/* These types have their own `InstructionKind`. */
+                | AstKind::ThrowStatement(_) => { //cfg.enter_statement(self.current_node_id, self.current_scope_id);/* These types have their own `InstructionKind`. */
                 }
-                it if it.is_statement() => {
-                    cfg.enter_statement(self.current_node_id);
+                AstKind::BlockStatement(_) => {},
+                AstKind::IfStatement(_) => {}, 
+                AstKind::WhileStatement(_) => {}, // Still not sure...
+                AstKind::ForStatement(_) => {},
+                it if it.is_statement()=> {
+                    //println!("PUSHING {:?}", kind);
+                    cfg.enter_statement(self.current_node_id, self.current_scope_id);
                 }
                 _ => { /* ignore the rest */ }
             }
