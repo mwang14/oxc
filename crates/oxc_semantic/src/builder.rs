@@ -2014,20 +2014,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             cfg.add_edge(before_function_graph_ix, after_function_graph_ix, EdgeType::Normal);
             after_function_graph_ix
         });
-        self.track_block(after_function_graph_ix);
-        /* cfg */
-        // Ok, so I think here we can track the function scope ID. Then we can add that into the function_cfg's 
-        // information so we can easily grab it out in global_aggregator.rs.
-        // getting the scope_id() of the function should be safe because it should be set in enter_scope above.
         self.add_scope_id(func.scope_id()); 
-        self.leave_scope();
-        self.leave_node(kind);
-
-
-        self.current_function_node_id = parent_function_node_id;
-
-        /* cfg */
-        // Pop function from tracking stack
         #[cfg(feature = "cfg")]
         {
             //if let Some(function_id) = self.current_function_id() {
@@ -2038,6 +2025,19 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             //}
             self.pop_function();
         }
+        self.track_block(after_function_graph_ix);
+        /* cfg */
+        // Ok, so I think here we can track the function scope ID. Then we can add that into the function_cfg's 
+        // information so we can easily grab it out in global_aggregator.rs.
+        // getting the scope_id() of the function should be safe because it should be set in enter_scope above.
+        self.leave_scope();
+        self.leave_node(kind);
+
+
+        self.current_function_node_id = parent_function_node_id;
+
+        /* cfg */
+        // Pop function from tracking stack
         /* cfg */
     }
 
@@ -2287,8 +2287,9 @@ impl<'a> SemanticBuilder<'a> {
                 AstKind::IfStatement(_) => {}, 
                 AstKind::WhileStatement(_) => {}, // Still not sure...
                 AstKind::ForStatement(_) => {},
+                AstKind::ForInStatement(_) => {},
                 it if it.is_statement()=> {
-                    //println!("PUSHING {:?}", kind);
+                    println!("PUSHING {:?}", kind);
                     cfg.enter_statement(self.current_node_id, self.current_scope_id);
                 }
                 _ => { /* ignore the rest */ }
