@@ -91,7 +91,7 @@ impl<'a> ControlFlowGraphBuilder<'a> {
     }
 
     pub fn add_edge(&mut self, a: BlockNodeId, b: BlockNodeId, weight: EdgeType) {
-        if matches!(weight, EdgeType::NewFunction) {
+        if matches!(weight, EdgeType::NewFunction(_)) {
             self.basic_block_mut(b).mark_as_reachable();
         } else if matches!(weight, EdgeType::Unreachable) || self.basic_block(a).is_unreachable() {
             if self.graph.edges_directed(b, Direction::Incoming).count() == 0 {

@@ -244,8 +244,8 @@ impl<'a> SemanticBuilder<'a> {
 
     #[cfg(feature = "cfg")]
     fn track_block(&mut self, block_id: BlockNodeId) {
-        if let Some(function_id) = self.current_function_id().cloned() {
-            if let Some(cfg_data) = self.oxc_function_data.get_mut(&function_id) {
+        for function_id in &self.function_stack {
+            if let Some(cfg_data) = self.oxc_function_data.get_mut(function_id) {
                 cfg_data.blocks.push(block_id);
                 if cfg_data.entry_block.is_none() {
                     cfg_data.entry_block = Some(block_id);
@@ -1935,6 +1935,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
 
         let parent_function_node_id = self.current_function_node_id;
         self.current_function_node_id = self.current_node_id;
+        let function_node_id = self.current_node_id;
         self.track_function_id(self.current_node_id);
 
         if func.is_declaration() {
@@ -1965,7 +1966,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
         control_flow!(self, |cfg| cfg.add_edge(
             before_function_graph_ix,
             function_graph_ix,
-            EdgeType::NewFunction
+            EdgeType::NewFunction(function_node_id)
         ));
         /* cfg */
 
@@ -2058,6 +2059,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
 
         let kind = AstKind::ArrowFunctionExpression(self.alloc(expr));
         self.enter_node(kind);
+        let function_node_id = self.current_node_id;
         self.enter_scope(
             {
                 let mut flags = ScopeFlags::Function | ScopeFlags::Arrow;
@@ -2079,7 +2081,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
         control_flow!(self, |cfg| cfg.add_edge(
             current_node_ix,
             function_graph_ix,
-            EdgeType::NewFunction
+            EdgeType::NewFunction(function_node_id)
         ));
         /* cfg */
 
@@ -2289,7 +2291,7 @@ impl<'a> SemanticBuilder<'a> {
                 AstKind::ForStatement(_) => {},
                 AstKind::ForInStatement(_) => {},
                 it if it.is_statement()=> {
-                    println!("PUSHING {:?}", kind);
+                    //println!("PUSHING {:?}", kind);
                     cfg.enter_statement(self.current_node_id, self.current_scope_id);
                 }
                 _ => { /* ignore the rest */ }

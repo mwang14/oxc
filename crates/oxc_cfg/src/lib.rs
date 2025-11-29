@@ -7,6 +7,7 @@ use std::fmt;
 
 use itertools::Itertools;
 use oxc_index::{IndexVec, define_nonmax_u32_index_type};
+use oxc_syntax::node::NodeId;
 use petgraph::{
     Direction,
     visit::{Control, DfsEvent, EdgeRef},
@@ -64,7 +65,7 @@ pub enum EdgeType {
     /// Cyclic aka loops
     Backedge,
     /// Marks start of a function subgraph
-    NewFunction,
+    NewFunction(NodeId),
     /// Finally
     Finalize,
     /// Error Path
@@ -137,7 +138,7 @@ impl ControlFlowGraph {
                     return filter_result;
                 }
                 let unreachable = !graph.edges_connecting(a, b).any(|edge| {
-                    !matches!(edge.weight(), EdgeType::NewFunction | EdgeType::Unreachable)
+                    !matches!(edge.weight(), EdgeType::NewFunction(_) | EdgeType::Unreachable)
                 });
 
                 if unreachable {
