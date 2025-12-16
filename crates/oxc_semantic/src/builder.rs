@@ -114,7 +114,7 @@ pub struct SemanticBuilder<'a> {
     #[cfg(feature = "cfg")]
     pub(crate) cfg: Option<ControlFlowGraphBuilder<'a>>,
     #[cfg(not(feature = "cfg"))]
-    #[allow(unused)]
+    //#[allow(unused)]
     pub(crate) cfg: (),
 
     pub(crate) class_table_builder: ClassTableBuilder<'a>,
@@ -233,7 +233,7 @@ impl<'a> SemanticBuilder<'a> {
         self.function_stack.last()
     }
 
-    fn new_tracked_block(&mut self) -> BlockNodeId {
+    fn _new_tracked_block(&mut self) -> BlockNodeId {
         control_flow!(self, |cfg| {
         let block = cfg.new_basic_block_normal();
         self.track_block(block);
@@ -1224,6 +1224,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
     fn visit_for_in_statement(&mut self, stmt: &ForInStatement<'a>) {
         let kind = AstKind::ForInStatement(self.alloc(stmt));
         self.enter_node(kind);
+        let for_node_id = self.current_node_id;
         self.enter_scope(ScopeFlags::empty(), &stmt.scope_id);
 
         self.visit_for_statement_left(&stmt.left);
@@ -1248,7 +1249,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             control_flow!(self, |cfg| {
                 let end_of_prepare_cond_graph_ix = cfg.current_node_ix;
                 let iteration_graph_ix = cfg.new_basic_block_normal();
-                cfg.append_iteration(right_node_id, IterationInstructionKind::In, Some(self.current_scope_id));
+                cfg.append_iteration(right_node_id, IterationInstructionKind::In(for_node_id), Some(self.current_scope_id));
                 let body_graph_ix = cfg.new_basic_block_normal();
 
                 cfg.ctx(None).default().allow_break().allow_continue();
@@ -1269,7 +1270,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             // connect before for statement to the iterable expression
             cfg.add_edge(before_for_stmt_graph_ix, start_prepare_cond_graph_ix, EdgeType::Normal);
             // connect the end of the iterable expression to the basic block with back edge
-            cfg.add_edge(end_of_prepare_cond_graph_ix, iteration_graph_ix, EdgeType::Normal);
+            cfg.add_edge(end_of_prepare_cond_graph_ix, iteration_graph_ix, EdgeType::ForEntry(for_node_id));
             // connect the basic block with back edge to the start of the body
             cfg.add_edge(iteration_graph_ix, body_graph_ix, EdgeType::Jump(JumpKind::True));
             // connect the end of the body back to the basic block
@@ -1295,6 +1296,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
     fn visit_for_of_statement(&mut self, stmt: &ForOfStatement<'a>) {
         let kind = AstKind::ForOfStatement(self.alloc(stmt));
         self.enter_node(kind);
+        let for_node_id = self.current_node_id;
         self.enter_scope(ScopeFlags::empty(), &stmt.scope_id);
 
         self.visit_for_statement_left(&stmt.left);
@@ -1319,7 +1321,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             control_flow!(self, |cfg| {
                 let end_of_prepare_cond_graph_ix = cfg.current_node_ix;
                 let iteration_graph_ix = cfg.new_basic_block_normal();
-                cfg.append_iteration(right_node_id, IterationInstructionKind::Of, Some(self.current_scope_id));
+                cfg.append_iteration(right_node_id, IterationInstructionKind::Of(for_node_id), Some(self.current_scope_id));
                 let body_graph_ix = cfg.new_basic_block_normal();
                 cfg.ctx(None).default().allow_break().allow_continue();
                 (end_of_prepare_cond_graph_ix, iteration_graph_ix, body_graph_ix)
@@ -1338,7 +1340,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             // connect before for statement to the iterable expression
             cfg.add_edge(before_for_stmt_graph_ix, start_prepare_cond_graph_ix, EdgeType::Normal);
             // connect the end of the iterable expression to the basic block with back edge
-            cfg.add_edge(end_of_prepare_cond_graph_ix, iteration_graph_ix, EdgeType::Normal);
+            cfg.add_edge(end_of_prepare_cond_graph_ix, iteration_graph_ix, EdgeType::ForEntry(for_node_id));
             // connect the basic block with back edge to the start of the body
             cfg.add_edge(iteration_graph_ix, body_graph_ix, EdgeType::Jump(JumpKind::True));
             // connect the end of the body back to the basic block
@@ -1511,7 +1513,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             let current_block = cfg.current_node_ix;
             self.track_block(current_block);
             if let Some(function_id) = self.current_function_id().cloned() {
-                if let Some(cfg_data) = self.oxc_function_data.get_mut(&function_id) {
+                if let Some(_cfg_data) = self.oxc_function_data.get_mut(&function_id) {
                     //cfg_data.exit_blocks.push(current_block);
                 }
             }
@@ -2289,7 +2291,8 @@ impl<'a> SemanticBuilder<'a> {
                 AstKind::IfStatement(_) => {}, 
                 AstKind::WhileStatement(_) => {}, // Still not sure...
                 AstKind::ForStatement(_) => {},
-                AstKind::ForInStatement(_) => {},
+                AstKind::ForInStatement(_) => {cfg.enter_statement(self.current_node_id, self.current_scope_id);},
+                AstKind::Class(_) => {cfg.enter_statement(self.current_node_id, self.current_scope_id);}
                 it if it.is_statement()=> {
                     //println!("PUSHING {:?}", kind);
                     cfg.enter_statement(self.current_node_id, self.current_scope_id);

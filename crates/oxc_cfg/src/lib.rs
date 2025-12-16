@@ -64,6 +64,8 @@ pub enum EdgeType {
     Normal,
     /// Cyclic aka loops
     Backedge,
+    /// Entering a for-in or for-of loop
+    ForEntry(NodeId),
     /// Marks start of a function subgraph
     NewFunction(NodeId),
     /// Finally

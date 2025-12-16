@@ -140,7 +140,7 @@ impl DebugDot for Instruction {
                 format!(
                     "Iteration({} {} {})",
                     self.node_id.map_or("None".to_string(), |id| ctx.debug_ast_kind(id)),
-                    if matches!(kind, IterationInstructionKind::Of) { "of" } else { "in" },
+                    if matches!(kind, IterationInstructionKind::Of(_)) { "of" } else { "in" },
                     // TODO: at this point we can't evaluate this node. needs access to the graph information.
                     "expr"
                 )

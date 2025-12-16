@@ -78,6 +78,6 @@ pub enum LabeledInstruction {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IterationInstructionKind {
-    Of,
-    In,
+    Of(NodeId),
+    In(NodeId),
 }
