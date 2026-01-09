@@ -1132,7 +1132,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
 
             cfg.add_edge(after_condition_graph_ix, start_alternate_graph_ix, EdgeType::Jump(JumpKind::False));
             cfg.add_edge(after_alternate_graph_ix, after_conditional_graph_ix, EdgeType::Normal);
-            after_condition_graph_ix
+            after_conditional_graph_ix
         });
         self.track_block(after_conditional_graph_ix);
         /* cfg */
@@ -2291,6 +2291,7 @@ impl<'a> SemanticBuilder<'a> {
                 AstKind::IfStatement(_) => {}, 
                 AstKind::WhileStatement(_) => {}, // Still not sure...
                 AstKind::ForStatement(_) => {},
+                AstKind::TryStatement(_) => {},
                 AstKind::ForInStatement(_) => {cfg.enter_statement(self.current_node_id, self.current_scope_id);},
                 AstKind::Class(_) => {cfg.enter_statement(self.current_node_id, self.current_scope_id);}
                 it if it.is_statement()=> {
