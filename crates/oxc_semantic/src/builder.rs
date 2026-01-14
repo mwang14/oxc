@@ -24,7 +24,8 @@ pub struct OxcFunctionData {
     pub entry_block: Option<BlockNodeId>,
     pub exit_blocks: Vec<BlockNodeId>,
     pub scope_id: Option<ScopeId>,
-    pub function_node_id: Option<NodeId>
+    pub function_node_id: Option<NodeId>,
+    pub is_arrow_expression: bool
 }
 use oxc_diagnostics::OxcDiagnostic;
 use oxc_span::{Atom, SourceType, Span};
@@ -209,7 +210,7 @@ impl<'a> SemanticBuilder<'a> {
     }
 
     #[cfg(feature = "cfg")]
-    fn push_function(&mut self, span: Span) {
+    fn push_function(&mut self, span: Span, is_arrow_expression: bool) {
         let function_id = format!("{}:{}", span.start, span.end);
         let function_id_cloned = function_id.clone();
         self.function_stack.push(function_id.clone());
@@ -219,7 +220,8 @@ impl<'a> SemanticBuilder<'a> {
             entry_block: None,
             exit_blocks: Vec::new(),
             scope_id: None,
-            function_node_id: None
+            function_node_id: None,
+            is_arrow_expression
         });
     }
 
@@ -1909,7 +1911,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
 
     fn visit_function(&mut self, func: &Function<'a>, flags: ScopeFlags) {
         /* cfg */
-        self.push_function(func.span);
+        self.push_function(func.span, false);
         // Push function to tracking stack
         #[cfg(feature = "cfg")]
 
@@ -2046,6 +2048,8 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
 
     fn visit_arrow_function_expression(&mut self, expr: &ArrowFunctionExpression<'a>) {
         /* cfg */
+        self.push_function(expr.span, expr.expression);
+        
         // We add a new basic block to the cfg before entering the node
         // so that the correct cfg_ix is associated with the ast node.
         #[cfg(feature = "cfg")]
@@ -2057,11 +2061,19 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             cfg.ctx(None).new_function();
             (current_node_ix, error_harness, function_graph_ix)
         });
+        
+        #[cfg(feature = "cfg")]
+        self.track_block(function_graph_ix);
         /* cfg */
 
         let kind = AstKind::ArrowFunctionExpression(self.alloc(expr));
         self.enter_node(kind);
+        
+        let parent_function_node_id = self.current_function_node_id;
+        self.current_function_node_id = self.current_node_id;
         let function_node_id = self.current_node_id;
+        self.track_function_id(self.current_node_id);
+        
         self.enter_scope(
             {
                 let mut flags = ScopeFlags::Function | ScopeFlags::Arrow;
@@ -2105,7 +2117,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
         self.visit_function_body(&expr.body);
 
         /* cfg */
-        control_flow!(self, |cfg| {
+        let after_function_graph_ix = control_flow!(self, |cfg| {
             let c = cfg.current_basic_block();
             // If the last is an unreachable instruction, it means there is already a explicit
             // return or throw statement at the end of function body, we don't need to
@@ -2119,12 +2131,23 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             cfg.ctx(None).resolve_expect(CtxFlags::FUNCTION);
             cfg.release_error_harness(error_harness);
             cfg.pop_finalization_stack();
-            cfg.current_node_ix = current_node_ix;
+            let after_function_graph_ix = cfg.new_basic_block_normal();
+            cfg.add_edge(current_node_ix, after_function_graph_ix, EdgeType::Normal);
+            after_function_graph_ix
         });
+        
+        self.add_scope_id(expr.scope_id());
+        #[cfg(feature = "cfg")]
+        {
+            self.pop_function();
+        }
+        self.track_block(after_function_graph_ix);
         /* cfg */
 
         self.leave_scope();
         self.leave_node(kind);
+        
+        self.current_function_node_id = parent_function_node_id;
     }
 
     fn visit_update_expression(&mut self, it: &UpdateExpression<'a>) {
