@@ -974,29 +974,29 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
         self.visit_expression(&expr.left);
 
         /* cfg  */
-        #[cfg(feature = "cfg")]
-        let (left_expr_end_ix, right_expr_start_ix) = control_flow!(self, |cfg| {
-            let left_expr_end_ix = cfg.current_node_ix;
-            let right_expr_start_ix = cfg.new_basic_block_normal();
-            (left_expr_end_ix, right_expr_start_ix)
-        });
-        self.track_block(left_expr_end_ix);
-        self.track_block(right_expr_start_ix);
+        //#[cfg(feature = "cfg")]
+        //let (left_expr_end_ix, right_expr_start_ix) = control_flow!(self, |cfg| {
+        //    let left_expr_end_ix = cfg.current_node_ix;
+        //    let right_expr_start_ix = cfg.new_basic_block_normal();
+        //    (left_expr_end_ix, right_expr_start_ix)
+        //});
+        //self.track_block(left_expr_end_ix);
+        //self.track_block(right_expr_start_ix);
         /* cfg  */
 
         self.visit_expression(&expr.right);
 
         /* cfg */
-        let after_logical_expr_ix =control_flow!(self, |cfg| {
-            let right_expr_end_ix = cfg.current_node_ix;
-            let after_logical_expr_ix = cfg.new_basic_block_normal();
-            
-            cfg.add_edge(left_expr_end_ix, right_expr_start_ix, EdgeType::Normal);
-            cfg.add_edge(left_expr_end_ix, after_logical_expr_ix, EdgeType::Normal);
-            cfg.add_edge(right_expr_end_ix, after_logical_expr_ix, EdgeType::Normal);
-            after_logical_expr_ix
-        });
-        self.track_block(after_logical_expr_ix);
+        //let after_logical_expr_ix =control_flow!(self, |cfg| {
+        //    let right_expr_end_ix = cfg.current_node_ix;
+        //    let after_logical_expr_ix = cfg.new_basic_block_normal();
+        //    
+        //    cfg.add_edge(left_expr_end_ix, right_expr_start_ix, EdgeType::Normal);
+        //    cfg.add_edge(left_expr_end_ix, after_logical_expr_ix, EdgeType::Normal);
+        //    cfg.add_edge(right_expr_end_ix, after_logical_expr_ix, EdgeType::Normal);
+        //    after_logical_expr_ix
+        //});
+        //self.track_block(after_logical_expr_ix);
         /* cfg */
 
         self.leave_node(kind);
