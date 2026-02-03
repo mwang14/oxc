@@ -63,7 +63,7 @@ pub enum EdgeType {
     /// Normal control flow path
     Normal,
     /// Cyclic aka loops
-    Backedge,
+    Backedge(JumpKind),
     /// Entering a for-in or for-of loop
     ForEntry(NodeId),
     /// Marks start of a function subgraph
@@ -182,7 +182,7 @@ impl ControlFlowGraph {
         let mut backedges = self
             .graph
             .edges_directed(node, Direction::Incoming)
-            .filter(|e| matches!(e.weight(), EdgeType::Backedge));
+            .filter(|e| matches!(e.weight(), EdgeType::Backedge(JumpKind::Unconditional)));
 
         // if this node doesn't have an backedge it isn't a loop starting point.
         let backedge = backedges.next()?;
@@ -197,7 +197,7 @@ impl ControlFlowGraph {
             && !self
                 .graph
                 .edges_directed(node, Direction::Outgoing)
-                .any(|e| matches!(e.weight(), EdgeType::Backedge))
+                .any(|e| matches!(e.weight(), EdgeType::Backedge(JumpKind::Unconditional)))
         {
             return get_jump_target(&self.graph, node).map(|it| (it, node));
         }

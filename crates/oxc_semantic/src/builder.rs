@@ -944,10 +944,10 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             cfg.add_edge(before_do_while_stmt_graph_ix, start_body_graph_ix, EdgeType::Normal);
             // body of do-while to start of condition
             cfg.add_edge(after_body_graph_ix, start_of_condition_graph_ix, EdgeType::Normal);
-            // end of condition to after do while
-            cfg.add_edge(end_of_condition_graph_ix, end_do_while_graph_ix, EdgeType::Normal);
-            // end of condition to after start of body
-            cfg.add_edge(end_of_condition_graph_ix, start_body_graph_ix, EdgeType::Backedge);
+            // end of condition to after do while (false branch)
+            cfg.add_edge(end_of_condition_graph_ix, end_do_while_graph_ix, EdgeType::Jump(JumpKind::False));
+            // end of condition to start of body (true branch, backedge)
+            cfg.add_edge(end_of_condition_graph_ix, start_body_graph_ix, EdgeType::Backedge(JumpKind::True));
 
             cfg.ctx(None)
                 .mark_break(end_do_while_graph_ix)
@@ -1206,8 +1206,8 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             let after_for_stmt = cfg.new_basic_block_normal();
             cfg.add_edge(before_for_graph_ix, test_graph_ix, EdgeType::Normal);
             cfg.add_edge(after_test_graph_ix, before_body_graph_ix, EdgeType::Jump(JumpKind::True));
-            cfg.add_edge(after_body_graph_ix, update_graph_ix, EdgeType::Backedge);
-            cfg.add_edge(update_graph_ix, test_graph_ix, EdgeType::Backedge);
+            cfg.add_edge(after_body_graph_ix, update_graph_ix, EdgeType::Backedge(JumpKind::Unconditional));
+            cfg.add_edge(update_graph_ix, test_graph_ix, EdgeType::Backedge(JumpKind::Unconditional));
             cfg.add_edge(after_test_graph_ix, after_for_stmt, EdgeType::Jump(JumpKind::False));
 
             cfg.ctx(None)
@@ -1277,7 +1277,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             cfg.add_edge(iteration_graph_ix, body_graph_ix, EdgeType::Jump(JumpKind::True));
             // connect the end of the body back to the basic block
             // with back edge for the next iteration
-            cfg.add_edge(end_of_body_graph_ix, iteration_graph_ix, EdgeType::Backedge);
+            cfg.add_edge(end_of_body_graph_ix, iteration_graph_ix, EdgeType::Backedge(JumpKind::Unconditional));
             // connect the basic block with back edge to the basic block after the for loop
             // for when there are no more iterations left in the iterable
             cfg.add_edge(iteration_graph_ix, after_for_graph_ix, EdgeType::Jump(JumpKind::False));
@@ -1347,7 +1347,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             cfg.add_edge(iteration_graph_ix, body_graph_ix, EdgeType::Jump(JumpKind::True));
             // connect the end of the body back to the basic block
             // with back edge for the next iteration
-            cfg.add_edge(end_of_body_graph_ix, iteration_graph_ix, EdgeType::Backedge);
+            cfg.add_edge(end_of_body_graph_ix, iteration_graph_ix, EdgeType::Backedge(JumpKind::Unconditional));
             // connect the basic block with back edge to the basic block after the for loop
             // for when there are no more iterations left in the iterable
             cfg.add_edge(iteration_graph_ix, after_for_graph_ix, EdgeType::Jump(JumpKind::False));
@@ -1856,7 +1856,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
 
             cfg.add_edge(before_while_stmt_graph_ix, condition_graph_ix, EdgeType::Normal);
             cfg.add_edge(condition_graph_ix, body_graph_ix, EdgeType::Jump(JumpKind::True));
-            cfg.add_edge(after_body_graph_ix, condition_graph_ix, EdgeType::Backedge);
+            cfg.add_edge(after_body_graph_ix, condition_graph_ix, EdgeType::Backedge(JumpKind::Unconditional));
             cfg.add_edge(condition_graph_ix, after_while_graph_ix, EdgeType::Jump(JumpKind::False));
 
             cfg.ctx(None)

@@ -84,7 +84,7 @@ impl DebugDot for ControlFlowGraph {
                                 attrs += ("style", Attr::ident("dashed"));
                             }
                         }
-                        EdgeType::Backedge => {
+                        EdgeType::Backedge(_) => {
                             attrs += ("color", Attr::ident("grey"));
                         }
                         EdgeType::Jump(_) => {
