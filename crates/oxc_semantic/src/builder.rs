@@ -2313,6 +2313,7 @@ impl<'a> SemanticBuilder<'a> {
                 AstKind::BlockStatement(_) => {},
                 AstKind::IfStatement(_) => {}, 
                 AstKind::WhileStatement(_) => {}, // Still not sure...
+                AstKind::DoWhileStatement(_) => {},
                 AstKind::ForStatement(_) => {},
                 AstKind::TryStatement(_) => {},
                 AstKind::ForInStatement(_) => {cfg.enter_statement(self.current_node_id, self.current_scope_id);},
