@@ -61,6 +61,10 @@ pub enum InstructionKind {
     Continue(LabeledInstruction),
     Throw,
     Condition,
+    /// Switch case condition: evaluates `discriminant === test`.
+    /// The `NodeId` inside is the discriminant expression.
+    /// The `Instruction::node_id` is the case test expression.
+    SwitchCondition(NodeId),
     Iteration(IterationInstructionKind),
 }
 

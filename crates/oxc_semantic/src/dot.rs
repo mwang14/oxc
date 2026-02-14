@@ -177,6 +177,7 @@ impl DebugDot for Instruction {
             InstructionKind::Return(ReturnInstructionKind::NotImplicitUndefined) => {
                 "return <value>".to_string()
             }
+            InstructionKind::SwitchCondition(_) => "switch".to_string()
         }
     }
 }

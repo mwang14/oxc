@@ -73,6 +73,7 @@ impl DisplayDot for Instruction {
             InstructionKind::Unreachable => "unreachable",
             InstructionKind::Throw => "throw",
             InstructionKind::Condition => "condition",
+            InstructionKind::SwitchCondition(_) => "switch",
             InstructionKind::Iteration(IterationInstructionKind::Of(_)) => "iteration <of>",
             InstructionKind::Iteration(IterationInstructionKind::In(_)) => "iteration <in>",
             InstructionKind::Break(LabeledInstruction::Labeled) => "break <label>",

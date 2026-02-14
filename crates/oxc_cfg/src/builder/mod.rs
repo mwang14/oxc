@@ -175,6 +175,10 @@ impl<'a> ControlFlowGraphBuilder<'a> {
         self.push_instruction_to(block, InstructionKind::Condition, node, Some(scope_id));
     }
 
+    pub fn append_switch_condition_to(&mut self, block: BlockNodeId, test_node: Option<NodeId>, discriminant_node: NodeId, scope_id: ScopeId) {
+        self.push_instruction_to(block, InstructionKind::SwitchCondition(discriminant_node), test_node, Some(scope_id));
+    }
+
     pub fn append_iteration(&mut self, node: Option<NodeId>, kind: IterationInstructionKind, scope_id: Option<ScopeId>) {
         self.push_instruction(InstructionKind::Iteration(kind), node, scope_id);
     }

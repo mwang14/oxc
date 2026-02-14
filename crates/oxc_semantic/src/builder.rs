@@ -125,6 +125,9 @@ pub struct SemanticBuilder<'a> {
     ast_node_records: Vec<NodeId>,
 
     #[cfg(feature = "cfg")]
+    switch_discriminant_node_id: Option<NodeId>,
+
+    #[cfg(feature = "cfg")]
     function_stack: Vec<String>,
     #[cfg(feature = "cfg")]
     oxc_function_data: FxHashMap<String, OxcFunctionData>,
@@ -174,6 +177,8 @@ impl<'a> SemanticBuilder<'a> {
             class_table_builder: ClassTableBuilder::new(),
             #[cfg(feature = "cfg")]
             ast_node_records: Vec::new(),
+            #[cfg(feature = "cfg")]
+            switch_discriminant_node_id: None,
             #[cfg(feature = "cfg")]
             function_stack: Vec::new(),
             #[cfg(feature = "cfg")]
@@ -1530,7 +1535,14 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
     fn visit_switch_statement(&mut self, stmt: &SwitchStatement<'a>) {
         let kind = AstKind::SwitchStatement(self.alloc(stmt));
         self.enter_node(kind);
+        #[cfg(feature = "cfg")]
+        self.record_ast_nodes();
         self.visit_expression(&stmt.discriminant);
+        #[cfg(feature = "cfg")]
+        {
+            let discriminant_node_id = self.retrieve_recorded_ast_node();
+            self.switch_discriminant_node_id = discriminant_node_id;
+        }
         self.enter_scope(ScopeFlags::empty(), &stmt.scope_id);
 
         /* cfg */
@@ -1567,14 +1579,14 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             for i in 0..switch_case_graph_spans.len() {
                 let case_graph_span = switch_case_graph_spans[i];
 
-                // every switch case condition can be skipped,
-                // so there's a possible jump from it to the next switch case condition
-                for y in switch_case_graph_spans.iter().skip(i + 1) {
-                    cfg.add_edge(case_graph_span.0, y.0, EdgeType::Normal);
+                // If this case doesn't match, skip to the next case condition
+                if i + 1 < switch_case_graph_spans.len() {
+                    let next = switch_case_graph_spans[i + 1];
+                    cfg.add_edge(case_graph_span.0, next.0, EdgeType::Jump(JumpKind::False));
                 }
 
                 // connect the end of each switch statement to
-                // the condition of the next switch statement
+                // the condition of the next switch statement (fall-through)
                 if switch_case_graph_spans.len() > i + 1 {
                     let (_, end_of_switch_case) = switch_case_graph_spans[i];
                     let (next_switch_statement_condition, _) = switch_case_graph_spans[i + 1];
@@ -1585,8 +1597,11 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
                         EdgeType::Normal,
                     );
                 }
+            }
 
-                cfg.add_edge(discriminant_graph_ix, case_graph_span.0, EdgeType::Normal);
+            // Discriminant only connects to the first case
+            if let Some(first) = switch_case_graph_spans.first() {
+                cfg.add_edge(discriminant_graph_ix, first.0, EdgeType::Normal);
             }
 
             let end_of_switch_case_statement = cfg.new_basic_block_normal();
@@ -1595,10 +1610,14 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
                 cfg.add_edge(last.1, end_of_switch_case_statement, EdgeType::Normal);
             }
 
-            // if we don't have a default case there should be an edge from discriminant to the end of
-            // the statement.
+            // If no default case, the last case's false edge goes to end-of-switch
             if !have_default_case {
-                cfg.add_edge(discriminant_graph_ix, end_of_switch_case_statement, EdgeType::Normal);
+                if let Some(last) = switch_case_graph_spans.last() {
+                    cfg.add_edge(last.0, end_of_switch_case_statement, EdgeType::Jump(JumpKind::False));
+                } else {
+                    // No cases at all, discriminant goes directly to end
+                    cfg.add_edge(discriminant_graph_ix, end_of_switch_case_statement, EdgeType::Normal);
+                }
             }
 
             cfg.ctx(None).mark_break(end_of_switch_case_statement).resolve();
@@ -1609,6 +1628,10 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
         /* cfg */
 
         self.leave_scope();
+        #[cfg(feature = "cfg")]
+        {
+            self.switch_discriminant_node_id = None;
+        }
         self.leave_node(kind);
     }
 
@@ -1622,14 +1645,19 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             self.visit_expression(expr);
             #[cfg(feature = "cfg")]
             let test_node_id = self.retrieve_recorded_ast_node();
-            control_flow!(self, |cfg| cfg.append_condition_to(cfg.current_node_ix, test_node_id, self.current_scope_id));
+            #[cfg(feature = "cfg")]
+            if let Some(discriminant_id) = self.switch_discriminant_node_id {
+                control_flow!(self, |cfg| cfg.append_switch_condition_to(cfg.current_node_ix, test_node_id, discriminant_id, self.current_scope_id));
+            } else {
+                control_flow!(self, |cfg| cfg.append_condition_to(cfg.current_node_ix, test_node_id, self.current_scope_id));
+            }
         }
 
         /* cfg */
         let statements_in_switch_graph_ix = control_flow!(self, |cfg| {
             let after_test_graph_ix = cfg.current_node_ix;
             let statements_in_switch_graph_ix = cfg.new_basic_block_normal();
-            cfg.add_edge(after_test_graph_ix, statements_in_switch_graph_ix, EdgeType::Jump(JumpKind::False)); // TODO We need to desugar these.
+            cfg.add_edge(after_test_graph_ix, statements_in_switch_graph_ix, EdgeType::Jump(JumpKind::True)); // Enter case body when discriminant === test
             statements_in_switch_graph_ix
         });
         self.track_block(statements_in_switch_graph_ix);
@@ -2315,6 +2343,7 @@ impl<'a> SemanticBuilder<'a> {
                 }
                 AstKind::BlockStatement(_) => {},
                 AstKind::IfStatement(_) => {}, 
+                AstKind::SwitchStatement(_) => {}, 
                 AstKind::WhileStatement(_) => {}, // Still not sure...
                 AstKind::DoWhileStatement(_) => {},
                 AstKind::ForStatement(_) => {},
