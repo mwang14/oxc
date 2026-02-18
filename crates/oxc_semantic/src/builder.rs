@@ -1733,14 +1733,16 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
         #[cfg(feature = "cfg")]
         let catch_block_end_ix = if let Some(handler) = &stmt.handler {
             /* cfg */
-            control_flow!(self, |cfg| {
+            let catch_block_start_ix = control_flow!(self, |cfg| {
                 let Some(error_harness) = error_harness else {
                     unreachable!("we always create an error harness if we have a catch block.");
                 };
                 cfg.release_error_harness(error_harness);
                 let catch_block_start_ix = cfg.new_basic_block_normal();
                 cfg.add_edge(error_harness, catch_block_start_ix, EdgeType::Normal);
+                catch_block_start_ix
             });
+            self.track_block(catch_block_start_ix);
 
             /* cfg */
 
@@ -1769,14 +1771,16 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
         #[cfg(feature = "cfg")]
         let finally_block_end_ix = if let Some(finalizer) = &stmt.finalizer {
             /* cfg */
-            control_flow!(self, |cfg| {
+            let start_finally_graph_ix = control_flow!(self, |cfg| {
                 let Some(before_finalizer_graph_ix) = before_finalizer_graph_ix else {
                     unreachable!("we always create a finalizer when there is a finally block.");
                 };
                 cfg.release_finalizer(before_finalizer_graph_ix);
                 let start_finally_graph_ix = cfg.new_basic_block_normal();
                 cfg.add_edge(before_finalizer_graph_ix, start_finally_graph_ix, EdgeType::Normal);
+                start_finally_graph_ix
             });
+            self.track_block(start_finally_graph_ix);
             /* cfg */
 
             self.visit_block_statement(finalizer);
