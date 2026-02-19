@@ -27,6 +27,7 @@ pub struct OxcFunctionData {
     pub function_node_id: Option<NodeId>,
     pub is_arrow_expression: bool,
     pub is_expression: bool,
+    pub is_async: bool,
 }
 use oxc_diagnostics::OxcDiagnostic;
 use oxc_span::{Atom, SourceType, Span};
@@ -216,7 +217,7 @@ impl<'a> SemanticBuilder<'a> {
     }
 
     #[cfg(feature = "cfg")]
-    fn push_function(&mut self, span: Span, is_arrow_expression: bool, is_expression: bool) {
+    fn push_function(&mut self, span: Span, is_arrow_expression: bool, is_expression: bool, is_async: bool) {
         let function_id = format!("{}:{}", span.start, span.end);
         let function_id_cloned = function_id.clone();
         self.function_stack.push(function_id.clone());
@@ -228,7 +229,8 @@ impl<'a> SemanticBuilder<'a> {
             scope_id: None,
             function_node_id: None,
             is_arrow_expression,
-            is_expression
+            is_expression,
+            is_async,
         });
     }
 
@@ -1946,7 +1948,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
     fn visit_function(&mut self, func: &Function<'a>, flags: ScopeFlags) {
         /* cfg */
         
-        self.push_function(func.span, false, func.is_expression());
+        self.push_function(func.span, false, func.is_expression(), func.r#async);
         // Push function to tracking stack
         #[cfg(feature = "cfg")]
 
@@ -2083,7 +2085,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
 
     fn visit_arrow_function_expression(&mut self, expr: &ArrowFunctionExpression<'a>) {
         /* cfg */
-        self.push_function(expr.span, expr.expression, true);
+        self.push_function(expr.span, expr.expression, true, expr.r#async);
         
         // We add a new basic block to the cfg before entering the node
         // so that the correct cfg_ix is associated with the ast node.
