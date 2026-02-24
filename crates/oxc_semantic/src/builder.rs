@@ -132,6 +132,9 @@ pub struct SemanticBuilder<'a> {
     function_stack: Vec<String>,
     #[cfg(feature = "cfg")]
     oxc_function_data: FxHashMap<String, OxcFunctionData>,
+
+    #[cfg(feature = "cfg")]
+    file_path: String,
 }
 
 /// Data returned by [`SemanticBuilder::build`].
@@ -184,6 +187,8 @@ impl<'a> SemanticBuilder<'a> {
             function_stack: Vec::new(),
             #[cfg(feature = "cfg")]
             oxc_function_data: FxHashMap::default(),
+            #[cfg(feature = "cfg")]
+            file_path: String::new(),
         }
     }
 
@@ -197,6 +202,13 @@ impl<'a> SemanticBuilder<'a> {
     #[must_use]
     pub fn with_check_syntax_error(mut self, yes: bool) -> Self {
         self.check_syntax_error = yes;
+        self
+    }
+
+    #[must_use]
+    #[cfg(feature = "cfg")]
+    pub fn with_file_path(mut self, file_path: String) -> Self {
+        self.file_path = file_path;
         self
     }
 
@@ -218,7 +230,7 @@ impl<'a> SemanticBuilder<'a> {
 
     #[cfg(feature = "cfg")]
     fn push_function(&mut self, span: Span, is_arrow_expression: bool, is_expression: bool, is_async: bool) {
-        let function_id = format!("{}:{}", span.start, span.end);
+        let function_id = format!("{}:{}:{}", self.file_path, span.start, span.end);
         let function_id_cloned = function_id.clone();
         self.function_stack.push(function_id.clone());
         self.oxc_function_data.insert(function_id, OxcFunctionData {
