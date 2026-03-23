@@ -1229,7 +1229,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             let after_for_stmt = cfg.new_basic_block_normal();
             cfg.add_edge(before_for_graph_ix, test_graph_ix, EdgeType::Normal);
             cfg.add_edge(after_test_graph_ix, before_body_graph_ix, EdgeType::Jump(JumpKind::True));
-            cfg.add_edge(after_body_graph_ix, update_graph_ix, EdgeType::Backedge(JumpKind::Unconditional));
+            cfg.add_edge(after_body_graph_ix, update_graph_ix, EdgeType::Jump(JumpKind::Unconditional));
             cfg.add_edge(update_graph_ix, test_graph_ix, EdgeType::Backedge(JumpKind::Unconditional));
             cfg.add_edge(after_test_graph_ix, after_for_stmt, EdgeType::Jump(JumpKind::False));
 
