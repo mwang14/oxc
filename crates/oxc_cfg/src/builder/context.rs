@@ -17,7 +17,7 @@ pub(super) struct Ctx<'a> {
     label: Option<&'a str>,
     entries: Vec<(CtxFlags, BlockNodeId)>,
     break_jmp: Option<BlockNodeId>,
-    continue_jmp: Option<BlockNodeId>,
+    continue_jmp: Option<(BlockNodeId, EdgeType)>,
 }
 
 impl<'a> Ctx<'a> {
@@ -42,8 +42,8 @@ pub trait CtxCursor {
     #![expect(clippy::return_self_not_must_use)]
     /// Marks the break jump position in the current context.
     fn mark_break(self, jmp_pos: BlockNodeId) -> Self;
-    /// Marks the continue jump position in the current context.
-    fn mark_continue(self, jmp_pos: BlockNodeId) -> Self;
+    /// Marks the continue jump position and edge type in the current context.
+    fn mark_continue(self, jmp_pos: BlockNodeId, edge_type: EdgeType) -> Self;
     /// Creates a break entry in the current context.
     fn r#break(self, bb: BlockNodeId) -> Self;
     /// Creates a continue entry in the current context.
@@ -61,10 +61,10 @@ impl CtxCursor for QueryCtx<'_, '_> {
         self
     }
 
-    fn mark_continue(self, jmp_pos: BlockNodeId) -> Self {
+    fn mark_continue(self, jmp_pos: BlockNodeId, edge_type: EdgeType) -> Self {
         self.0.in_continue_context(self.1, |ctx| {
             debug_assert!(ctx.continue_jmp.is_none());
-            ctx.continue_jmp = Some(jmp_pos);
+            ctx.continue_jmp = Some((jmp_pos, edge_type.clone()));
         });
         self
     }
@@ -126,31 +126,28 @@ impl<'a, 'c> QueryCtx<'a, 'c> {
     pub fn resolve_with_upper_label(mut self) {
         let Some(ctx) = self.0.ctx_stack.pop() else { return };
 
-        let continue_jmp = ctx.continue_jmp;
+        let continue_jmp = ctx.continue_jmp.clone();
 
         self.resolve_ctx(ctx);
 
         // mark the upper label continue jump point the same as ours if it isn't already assigned,
         // NOTE: if it is already assigned there's a resolution before this context.
-        if let Some(jmp) = continue_jmp
+        if let Some((jmp, edge_type)) = continue_jmp
             && let Some(label_ctx @ RefCtxCursor(Ctx { continue_jmp: None, .. })) =
                 self.0.immediate_labeled_ctx()
         {
-            label_ctx.mark_continue(jmp);
+            label_ctx.mark_continue(jmp, edge_type);
         }
     }
 
     /// Resolves the current context and adds the required edges to the graph.
     fn resolve_ctx(&mut self, ctx: Ctx<'a>) {
-        // TODO: This match is here to prevent redundant iterations and/or conditions by handling them
-        // before starting the iteration, I don't like the current implementation so it would be
-        // nice if we find a better way of doing it.
         match (ctx.break_jmp, ctx.continue_jmp) {
-            (Some(break_), Some(continue_)) => {
+            (Some(break_), Some((continue_, continue_edge))) => {
                 for entry in ctx.entries {
                     match entry.0 {
                         CtxFlags::BREAK => self.0.add_edge(entry.1, break_, EdgeType::Jump(crate::JumpKind::Unconditional)),
-                        CtxFlags::CONTINUE => self.0.add_edge(entry.1, continue_, EdgeType::Jump(crate::JumpKind::Unconditional)),
+                        CtxFlags::CONTINUE => self.0.add_edge(entry.1, continue_, continue_edge.clone()),
                         _ => {}
                     }
                 }
@@ -162,10 +159,10 @@ impl<'a, 'c> QueryCtx<'a, 'c> {
                     }
                 }
             }
-            (None, Some(jmp)) => {
+            (None, Some((jmp, edge_type))) => {
                 for entry in ctx.entries {
                     if matches!(entry.0, CtxFlags::CONTINUE) {
-                        self.0.add_edge(entry.1, jmp, EdgeType::Jump(crate::JumpKind::Unconditional));
+                        self.0.add_edge(entry.1, jmp, edge_type.clone());
                     }
                 }
             }
@@ -197,9 +194,9 @@ impl CtxCursor for RefCtxCursor<'_, '_> {
         self
     }
 
-    fn mark_continue(self, jmp_pos: BlockNodeId) -> Self {
+    fn mark_continue(self, jmp_pos: BlockNodeId, edge_type: EdgeType) -> Self {
         debug_assert!(self.0.continue_jmp.is_none());
-        self.0.continue_jmp = Some(jmp_pos);
+        self.0.continue_jmp = Some((jmp_pos, edge_type));
         self
     }
 

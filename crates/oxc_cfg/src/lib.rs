@@ -48,7 +48,7 @@ impl fmt::Display for BasicBlockId {
 
 pub type Graph = petgraph::graph::DiGraph<BasicBlockId, EdgeType>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum JumpKind {
     True,
     False,
@@ -64,6 +64,8 @@ pub enum EdgeType {
     Normal,
     /// Cyclic aka loops
     Backedge(JumpKind),
+    /// Back edge for for-in/for-of iteration (always fires, increments loop index)
+    IterationBackedge,
     /// Entering a for-in or for-of loop
     ForEntry(NodeId),
     /// Marks start of a function subgraph

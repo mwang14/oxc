@@ -1,5 +1,5 @@
 use oxc_cfg::{ControlFlowGraphBuilder, CtxCursor};
-use oxc_syntax::node::NodeId;
+use oxc_syntax::{node::NodeId, scope::ScopeId};
 /// same as but just the skeleton
 /// ```js
 /// A: {
@@ -29,7 +29,7 @@ fn labeled_statement_with_multiple_loops_continue_and_break() {
     cfg.ctx(None).default().allow_break().allow_continue();
     cfg.ctx(None).mark_break(c2).mark_continue(c2).resolve_with_upper_label();
 
-    cfg.append_break(NodeId::DUMMY, A);
+    cfg.append_break(NodeId::DUMMY, A, ScopeId::new(5));
 
     // labeled block end
     cfg.ctx(A).mark_break(labeled).resolve();

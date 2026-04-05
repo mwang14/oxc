@@ -974,7 +974,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
 
             cfg.ctx(None)
                 .mark_break(end_do_while_graph_ix)
-                .mark_continue(start_of_condition_graph_ix)
+                .mark_continue(start_of_condition_graph_ix, EdgeType::Jump(JumpKind::Unconditional))
                 .resolve_with_upper_label();
             (end_of_condition_graph_ix, end_do_while_graph_ix)
         });
@@ -1235,7 +1235,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
 
             cfg.ctx(None)
                 .mark_break(after_for_stmt)
-                .mark_continue(update_graph_ix)
+                .mark_continue(update_graph_ix, EdgeType::Jump(JumpKind::Unconditional))
                 .resolve_with_upper_label();
             after_for_stmt
         });
@@ -1300,14 +1300,14 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             cfg.add_edge(iteration_graph_ix, body_graph_ix, EdgeType::Jump(JumpKind::True));
             // connect the end of the body back to the basic block
             // with back edge for the next iteration
-            cfg.add_edge(end_of_body_graph_ix, iteration_graph_ix, EdgeType::Backedge(JumpKind::Unconditional));
+            cfg.add_edge(end_of_body_graph_ix, iteration_graph_ix, EdgeType::IterationBackedge);
             // connect the basic block with back edge to the basic block after the for loop
             // for when there are no more iterations left in the iterable
             cfg.add_edge(iteration_graph_ix, after_for_graph_ix, EdgeType::Jump(JumpKind::False));
 
             cfg.ctx(None)
                 .mark_break(after_for_graph_ix)
-                .mark_continue(iteration_graph_ix)
+                .mark_continue(iteration_graph_ix, EdgeType::IterationBackedge)
                 .resolve_with_upper_label();
             after_for_graph_ix
         });
@@ -1370,14 +1370,14 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
             cfg.add_edge(iteration_graph_ix, body_graph_ix, EdgeType::Jump(JumpKind::True));
             // connect the end of the body back to the basic block
             // with back edge for the next iteration
-            cfg.add_edge(end_of_body_graph_ix, iteration_graph_ix, EdgeType::Backedge(JumpKind::Unconditional));
+            cfg.add_edge(end_of_body_graph_ix, iteration_graph_ix, EdgeType::IterationBackedge);
             // connect the basic block with back edge to the basic block after the for loop
             // for when there are no more iterations left in the iterable
             cfg.add_edge(iteration_graph_ix, after_for_graph_ix, EdgeType::Jump(JumpKind::False));
 
             cfg.ctx(None)
                 .mark_break(after_for_graph_ix)
-                .mark_continue(iteration_graph_ix)
+                .mark_continue(iteration_graph_ix, EdgeType::IterationBackedge)
                 .resolve_with_upper_label();
             after_for_graph_ix
         });
@@ -1911,7 +1911,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
 
             cfg.ctx(None)
                 .mark_break(after_while_graph_ix)
-                .mark_continue(condition_graph_ix)
+                .mark_continue(condition_graph_ix, EdgeType::Jump(JumpKind::Unconditional))
                 .resolve_with_upper_label();
             after_while_graph_ix
         });
