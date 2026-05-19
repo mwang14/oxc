@@ -187,12 +187,10 @@ impl ControlFlowGraph {
             .filter(|e| matches!(e.weight(), EdgeType::Backedge(JumpKind::Unconditional)));
 
         // if this node doesn't have an backedge it isn't a loop starting point.
+        // Multiple backedges per loop header are valid (e.g. a `while` body with
+        // both fall-through and `continue;` back-edges). Take the first; the
+        // rest correspond to the same loop and don't change the answer.
         let backedge = backedges.next()?;
-
-        assert!(
-            backedges.next().is_none(),
-            "there should only be one backedge to each basic block."
-        );
 
         // if instructions are empty we might be in a `for(;;)`.
         if basic_block.instructions().is_empty()

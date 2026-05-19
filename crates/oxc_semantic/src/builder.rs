@@ -1911,7 +1911,7 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
 
             cfg.ctx(None)
                 .mark_break(after_while_graph_ix)
-                .mark_continue(condition_graph_ix, EdgeType::Jump(JumpKind::Unconditional))
+                .mark_continue(condition_graph_ix, EdgeType::Backedge(JumpKind::Unconditional))
                 .resolve_with_upper_label();
             after_while_graph_ix
         });

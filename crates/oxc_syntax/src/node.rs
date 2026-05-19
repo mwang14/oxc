@@ -15,6 +15,7 @@ impl NodeId {
 
     /// Node id of the Program node.
     pub const ROOT: Self = NodeId::new(0);
+
 }
 
 bitflags! {
