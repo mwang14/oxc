@@ -1170,7 +1170,21 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
         self.enter_node(kind);
         self.enter_scope(ScopeFlags::empty(), &stmt.scope_id);
         if let Some(init) = &stmt.init {
+            #[cfg(feature = "cfg")]
+            let record_init = !matches!(init, ForStatementInit::VariableDeclaration(_));
+            #[cfg(feature = "cfg")]
+            if record_init {
+                self.record_ast_nodes();
+            }
             self.visit_for_statement_init(init);
+            #[cfg(feature = "cfg")]
+            if record_init {
+                if let Some(init_node_id) = self.retrieve_recorded_ast_node() {
+                    control_flow!(self, |cfg| {
+                        cfg.enter_statement(init_node_id, self.current_scope_id);
+                    });
+                }
+            }
         }
         /* cfg */
         #[cfg(feature = "cfg")]
