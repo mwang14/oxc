@@ -2384,6 +2384,15 @@ impl<'a> SemanticBuilder<'a> {
                 AstKind::TryStatement(_) => {},
                 AstKind::ForInStatement(_) => {cfg.enter_statement(self.current_node_id, self.current_scope_id);},
                 AstKind::Class(_) => {cfg.enter_statement(self.current_node_id, self.current_scope_id);}
+                // TypeScript declarations with runtime meaning. Like `Class`,
+                // they are not `is_statement()`, so push them by hand so the
+                // interpreter executes them (enum objects, namespace objects,
+                // `import x = require()` bindings).
+                AstKind::TSEnumDeclaration(_)
+                | AstKind::TSModuleDeclaration(_)
+                | AstKind::TSImportEqualsDeclaration(_) => {
+                    cfg.enter_statement(self.current_node_id, self.current_scope_id);
+                }
                 it if it.is_statement()=> {
                     //println!("PUSHING {:?}", kind);
                     cfg.enter_statement(self.current_node_id, self.current_scope_id);
