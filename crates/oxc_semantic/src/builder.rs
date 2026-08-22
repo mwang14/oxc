@@ -2386,11 +2386,11 @@ impl<'a> SemanticBuilder<'a> {
                 AstKind::Class(_) => {cfg.enter_statement(self.current_node_id, self.current_scope_id);}
                 // TypeScript declarations with runtime meaning. Like `Class`,
                 // they are not `is_statement()`, so push them by hand so the
-                // interpreter executes them (enum objects, namespace objects,
-                // `import x = require()` bindings).
-                AstKind::TSEnumDeclaration(_)
-                | AstKind::TSModuleDeclaration(_)
-                | AstKind::TSImportEqualsDeclaration(_) => {
+                // interpreter executes them (enum objects, `import x =
+                // require()` bindings). `TSModuleDeclaration` is pushed in
+                // `leave_kind` instead: the namespace object is built from
+                // what its body bound, so it must come after the body.
+                AstKind::TSEnumDeclaration(_) | AstKind::TSImportEqualsDeclaration(_) => {
                     cfg.enter_statement(self.current_node_id, self.current_scope_id);
                 }
                 it if it.is_statement()=> {
@@ -2510,6 +2510,19 @@ impl<'a> SemanticBuilder<'a> {
     }
 
     fn leave_kind(&mut self, kind: AstKind<'a>) {
+        /* cfg */
+        control_flow!(self, |cfg| {
+            // A namespace runs its body first (in its own scope — the body's
+            // statements were pushed while that scope was current) and only
+            // then builds its object and copies the exports onto it. So it is
+            // pushed here, after the body, with the enclosing scope current:
+            // the name binds where tsc's `var N` does.
+            if let AstKind::TSModuleDeclaration(_) = kind {
+                cfg.enter_statement(self.current_node_id, self.current_scope_id);
+            }
+        });
+        /* cfg */
+
         match kind {
             AstKind::CatchParameter(_) => {
                 self.resolve_references_for_current_scope();
