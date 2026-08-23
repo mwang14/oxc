@@ -1976,26 +1976,39 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
     fn visit_function(&mut self, func: &Function<'a>, flags: ScopeFlags) {
         /* cfg */
         
-        self.push_function(func.span, false, func.is_expression(), func.r#async, func.generator);
+        // A function without a body — an overload signature, an abstract
+        // method, a `declare function` — is not a function at runtime: tsc
+        // emits nothing for it. It gets no function record, no CFG and no
+        // NewFunction edge (`has_body` guards every such step below); its
+        // scope and symbols are still built so names resolve.
+        let has_body = func.body.is_some();
+        if has_body {
+            self.push_function(func.span, false, func.is_expression(), func.r#async, func.generator);
+        }
         // Push function to tracking stack
         #[cfg(feature = "cfg")]
 
         // We add a new basic block to the cfg before entering the node
         // so that the correct cfg_ix is associated with the ast node.
         #[cfg(feature = "cfg")]
-        let (before_function_graph_ix, error_harness, function_graph_ix) =
-            control_flow!(self, |cfg| {
+        let cfg_function = if has_body {
+            Some(control_flow!(self, |cfg| {
                 let before_function_graph_ix = cfg.current_node_ix;
                 cfg.push_finalization_stack();
                 let error_harness = cfg.attach_error_harness(ErrorEdgeKind::Implicit);
                 let function_graph_ix = cfg.new_basic_block_function();
                 cfg.ctx(None).new_function();
                 (before_function_graph_ix, error_harness, function_graph_ix)
-            });
+            }))
+        } else {
+            None
+        };
 
         // Track the function entry block
         #[cfg(feature = "cfg")]
-        self.track_block(function_graph_ix);
+        if let Some((_, _, function_graph_ix)) = &cfg_function {
+            self.track_block(*function_graph_ix);
+        }
         /* cfg */
 
         let kind = AstKind::Function(self.alloc(func));
@@ -2005,7 +2018,9 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
         let parent_function_node_id = self.current_function_node_id;
         self.current_function_node_id = self.current_node_id;
         let function_node_id = self.current_node_id;
-        self.track_function_id(self.current_node_id);
+        if has_body {
+            self.track_function_id(self.current_node_id);
+        }
 
         if func.is_declaration() {
             func.bind(self);
@@ -2032,11 +2047,16 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
         }
 
         /* cfg */
-        control_flow!(self, |cfg| cfg.add_edge(
-            before_function_graph_ix,
-            function_graph_ix,
-            EdgeType::NewFunction(function_node_id)
-        ));
+        #[cfg(feature = "cfg")]
+        if let Some((before_function_graph_ix, _, function_graph_ix)) = &cfg_function {
+            let (before_function_graph_ix, function_graph_ix) =
+                (*before_function_graph_ix, *function_graph_ix);
+            control_flow!(self, |cfg| cfg.add_edge(
+                before_function_graph_ix,
+                function_graph_ix,
+                EdgeType::NewFunction(function_node_id)
+            ));
+        }
         /* cfg */
 
         if let Some(type_parameters) = &func.type_parameters {
@@ -2066,36 +2086,33 @@ impl<'a> Visit<'a> for SemanticBuilder<'a> {
         }
 
         /* cfg */
-        let after_function_graph_ix = control_flow!(self, |cfg| {
-            let c = cfg.current_basic_block();
-            // If the last is an unreachable instruction, it means there is already a explicit
-            // return or throw statement at the end of function body, we don't need to
-            // insert an implicit return.
-            if !matches!(
-                c.instructions().last().map(|inst| &inst.kind),
-                Some(InstructionKind::Unreachable)
-            ) {
-                cfg.push_implicit_return();
-            }
-            cfg.ctx(None).resolve_expect(CtxFlags::FUNCTION);
-            cfg.release_error_harness(error_harness);
-            cfg.pop_finalization_stack();
-            let after_function_graph_ix = cfg.new_basic_block_normal();
-            cfg.add_edge(before_function_graph_ix, after_function_graph_ix, EdgeType::Normal);
-            after_function_graph_ix
-        });
-        self.add_scope_id(func.scope_id()); 
         #[cfg(feature = "cfg")]
-        {
-            //if let Some(function_id) = self.current_function_id() {
-            //    if let Some(cfg_data) = self.oxc_function_data.get(function_id) {
-            //        println!("Function {}: {} blocks, entry: {:?}, exits: {:?}", 
-            //            cfg_data.function_id, cfg_data.blocks.len(), cfg_data.entry_block, cfg_data.exit_blocks);
-            //    }
-            //}
+        if let Some((before_function_graph_ix, error_harness, _)) = cfg_function {
+            let after_function_graph_ix = control_flow!(self, |cfg| {
+                let c = cfg.current_basic_block();
+                // If the last is an unreachable instruction, it means there is already a explicit
+                // return or throw statement at the end of function body, we don't need to
+                // insert an implicit return.
+                if !matches!(
+                    c.instructions().last().map(|inst| &inst.kind),
+                    Some(InstructionKind::Unreachable)
+                ) {
+                    cfg.push_implicit_return();
+                }
+                cfg.ctx(None).resolve_expect(CtxFlags::FUNCTION);
+                cfg.release_error_harness(error_harness);
+                cfg.pop_finalization_stack();
+                let after_function_graph_ix = cfg.new_basic_block_normal();
+                cfg.add_edge(before_function_graph_ix, after_function_graph_ix, EdgeType::Normal);
+                after_function_graph_ix
+            });
+            // The function record's scope id; a bodiless function has no
+            // record, and attaching its scope to the enclosing function's
+            // record would be wrong.
+            self.add_scope_id(func.scope_id());
             self.pop_function();
+            self.track_block(after_function_graph_ix);
         }
-        self.track_block(after_function_graph_ix);
         /* cfg */
         // Ok, so I think here we can track the function scope ID. Then we can add that into the function_cfg's 
         // information so we can easily grab it out in global_aggregator.rs.
