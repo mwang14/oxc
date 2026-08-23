@@ -2410,6 +2410,14 @@ impl<'a> SemanticBuilder<'a> {
                 AstKind::TSEnumDeclaration(_) | AstKind::TSImportEqualsDeclaration(_) => {
                     cfg.enter_statement(self.current_node_id, self.current_scope_id);
                 }
+                // `declare function f(): T;` has no body and no function at
+                // runtime (`visit_function` builds none), but it declares a
+                // name that exists elsewhere: pushed as a statement, into the
+                // enclosing block with the enclosing scope current, so the
+                // interpreter can bind the name to an unknown value.
+                AstKind::Function(func) if func.declare && func.body.is_none() => {
+                    cfg.enter_statement(self.current_node_id, self.current_scope_id);
+                }
                 it if it.is_statement()=> {
                     //println!("PUSHING {:?}", kind);
                     cfg.enter_statement(self.current_node_id, self.current_scope_id);
